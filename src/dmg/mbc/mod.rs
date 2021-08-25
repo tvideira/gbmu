@@ -1,30 +1,16 @@
-mod no_mbc;
+pub mod mbc_type;
 
-use no_mbc::NO_MBC;
-
-use std::path::PathBuf;
+use super::MMU;
 
 pub trait MBC {
-    // Constructor
-    fn new() -> Box<dyn MBC> where Self: Sized;
-    
-    // Getters
-    fn cartridge(&self) -> &Vec<u8>;
-
     // Method
-    fn load_cartridge(&mut self, cartridge_path: PathBuf);
+    fn update_banks(&self, mmu: &mut MMU, cartridge: &Vec<u8>);
     
     // Default method definition
-    fn print_cartridge_title(&self) {
+    fn print_cartridge_title(&self, cartridge: &Vec<u8>) {
         for i in 0x134..0x143 {
-            print!("{}", self.cartridge()[i] as char);
+            print!("{}", cartridge[i] as char);
         }
         println!();
-    }
-}
-
-impl Default for Box<dyn MBC> {
-    fn default() -> Box<dyn MBC> {
-        NO_MBC::new()
     }
 }
