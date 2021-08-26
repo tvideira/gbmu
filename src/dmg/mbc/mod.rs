@@ -1,16 +1,54 @@
-pub mod mbc_type;
+mod rom_only;
 
 use super::MMU;
 
-pub trait MBC {
-    // Method
-    fn update_banks(&self, mmu: &mut MMU, cartridge: &Vec<u8>);
-    
-    // Default method definition
-    fn print_cartridge_title(&self, cartridge: &Vec<u8>) {
-        for i in 0x134..0x143 {
-            print!("{}", cartridge[i] as char);
-        }
-        println!();
+use rom_only::update_banks_rom_only;
+
+use std::fmt;
+
+#[allow(non_camel_case_types)]
+pub enum MBC {
+    ROM_ONLY,
+    MBC1,
+    MBC2,
+    MBC3,
+    MBC5,
+}
+
+impl Default for MBC {
+    fn default() -> Self {
+        Self::ROM_ONLY
     }
 }
+
+impl fmt::Display for MBC {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::ROM_ONLY => { write!(f, "ROM_ONLY") },
+            Self::MBC1 => { write!(f, "MBC1") },
+            Self::MBC2 => { write!(f, "MBC2") },
+            Self::MBC3 => { write!(f, "MBC3") },
+            Self::MBC5 => { write!(f, "MBC5") },
+        }
+    }
+}
+
+impl MBC {
+    pub fn update_banks(&self, mmu: &mut MMU, cartridge: &Vec<u8>) {
+        match self {
+            Self::ROM_ONLY => update_banks_rom_only(mmu, cartridge),
+            _ => panic!("CARTRIDGE MBC NOT IMPLEMENTED YET"),
+        }        
+    }
+}
+
+pub fn get_mbc(cartridge: &Vec<u8>) -> MBC {
+    match cartridge[0x147] {
+        0x00 => MBC::ROM_ONLY,
+        0x01 => MBC::MBC1,
+        0x05 => MBC::MBC2,
+        0x11 => MBC::MBC3,
+        0x19 => MBC::MBC5,
+        _ => panic!("CARTRIDGE MBC NOT IMPLEMENTED YET"),
+    }
+} 
