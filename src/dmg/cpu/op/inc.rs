@@ -31,4 +31,15 @@ impl CPU {
         };
         self.clock += 8;
     }
+
+    pub fn inc_hl(&mut self, mmu: &mut MMU) {
+        let hl = self.registers.get_hl();
+        let value = mmu.read_byte(hl);
+        mmu.write_byte(hl, value.wrapping_add(1));
+        
+        self.registers.set_n_flag(false);
+        self.registers.set_h_flag((value & 0x0F) == 0x0F);
+        self.registers.set_z_flag(value.wrapping_add(1) == 0);
+        self.clock += 12;
+    }
 }

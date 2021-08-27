@@ -45,6 +45,10 @@ impl CPU {
             self.registers.pc += 2;
             self.clock += 12
         }
+    }
 
+    pub fn jp_hl(&mut self) {
+        self.registers.pc = self.registers.get_hl();
+        self.clock += 4;
     }
 }

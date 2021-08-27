@@ -1,7 +1,3 @@
-mod registers;
-
-use registers::REGISTERS;
-
 use super::MMU;
 
 const RED: u32 = 0xFF0000;
@@ -13,8 +9,8 @@ fn from_u8_rgb(r: u8, g: u8, b: u8) -> u32 {
 
 // PIXEL PROCESSING UNIT STRUCT
 pub struct PPU {
+    lcdc_status: bool,
     clock: u32,
-    registers: REGISTERS,
     pub main_screen_buffer: Vec<u32>,
     pub tile_data_buffer: Vec<u32>,
     pub background_buffer: Vec<u32>,
@@ -24,8 +20,8 @@ pub struct PPU {
 impl Default for PPU {
     fn default() -> Self {
         Self {
+            lcdc_status: false,
             clock: 0,
-            registers: REGISTERS::default(),
             main_screen_buffer: vec![0; 160 * 144],
             tile_data_buffer: vec![0; 128 * 384],
             background_buffer: vec![0; 256 * 256],
@@ -40,22 +36,35 @@ impl Default for PPU {
 }
 
 impl PPU {
+    pub fn update_ly_lyc_flag(&self, mmu: &mut MMU) {
+        let stat = mmu.read_byte(0xFF41);
+        if mmu.read_byte(0xFF44) == mmu.read_byte(0xFF45) {
+            mmu.write_byte(0xFF41, stat | 0x04);
+        } else {
+            mmu.write_byte(0xFF41, stat & 0xFB);
+        }
+    }
+
     pub fn step(&mut self, mmu: &mut MMU, delta_clock: u32) {
         self.clock += delta_clock;
 
-        let ly = mmu.read_byte(0xFF44) ;
+        let mut ly = mmu.read_byte(0xFF44);
         let stat = mmu.read_byte(0xFF41);
         let mode = stat & 0x03;
         let stat = stat & 0xFC;
+        let interrupt_flag = mmu.read_byte(0xFF0F);
 
         if self.clock >= 456 {
             self.clock -= 456;
-            mmu.write_byte(0xFF44, (ly + 1) % 154);
+            ly = (ly + 1) % 154;
+            mmu.write_byte(0xFF44, ly);
+            self.update_ly_lyc_flag(mmu);
 
             if ly >= 144 && mode != 1 {
                 mmu.write_byte(0xFF41, stat | 1);
+                mmu.write_byte(0xFF0F, interrupt_flag | 0x01);
                 //self.render_tile_set(mmu);
-                self.render_background(mmu);
+                //self.render_background(mmu);
             }
         }
         if ly < 144 {
@@ -75,6 +84,16 @@ impl PPU {
                     self.render_scan(mmu);
                 }
             }
+        }
+        let previous_status = self.lcdc_status;
+        let ff41 = mmu.read_byte(0xFF41);
+        self.lcdc_status = ((ff41 & 0x40 == 0x40) && (ff41 & 0x04) == 0x04)
+        || ((ff41 & 0x20 == 0x20) && (ff41 & 0x03) == 2)    // OAM INTERRUPT
+        || ((ff41 & 0x10 == 0x10) && (ff41 & 0x03) == 1)    // HBLANK INTERRUPT
+        || ((ff41 & 0x08 == 0x08) && (ff41 & 0x03) == 0);   // VBLANK INTERRUPT
+
+        if !previous_status && self.lcdc_status {
+            mmu.write_byte(0xFF0F, interrupt_flag | 0x02); // REQUEST INTERRUPT
         }
     }
 
@@ -218,39 +237,5 @@ impl PPU {
         palette[2] = (register & 0x30) >> 4;
         palette[3] = (register & 0xC0) >> 6;
         return palette;
-    }
-
-    pub fn update_registers(&mut self, mmu: & MMU) {
-        self.registers.set_lcdc(mmu.read_byte(0xFF40));
-        self.registers.set_stat(mmu.read_byte(0xFF41));
-        self.registers.scy      = mmu.read_byte(0xFF42);
-        self.registers.scx      = mmu.read_byte(0xFF43);
-        self.registers.ly       = mmu.read_byte(0xFF44);
-        self.registers.lyc      = mmu.read_byte(0xFF45);
-        self.registers.dma      = mmu.read_byte(0xFF46);
-        self.registers.bgp      = mmu.read_byte(0xFF47);
-        self.registers.obp_0    = mmu.read_byte(0xFF48);
-        self.registers.obp_1    = mmu.read_byte(0xFF49);
-        self.registers.wy       = mmu.read_byte(0xFF4A);
-        self.registers.wx       = mmu.read_byte(0xFF4B);
-    }
-
-    pub fn update_mmu(&mut self, mmu: &mut MMU) {
-        mmu.write_byte(0xFF40, self.registers.get_lcdc());
-        mmu.write_byte(0xFF41, self.registers.get_stat());
-        mmu.write_byte(0xFF42, self.registers.scy);
-        mmu.write_byte(0xFF43, self.registers.scx);
-        mmu.write_byte(0xFF44, self.registers.ly);
-        mmu.write_byte(0xFF45, self.registers.lyc);
-        mmu.write_byte(0xFF46, self.registers.dma);
-        mmu.write_byte(0xFF47, self.registers.bgp);
-        mmu.write_byte(0xFF48, self.registers.obp_0);
-        mmu.write_byte(0xFF49, self.registers.obp_1);
-        mmu.write_byte(0xFF4A, self.registers.wy);
-        mmu.write_byte(0xFF4B, self.registers.wx);
-    }
-
-    pub fn debug(&self) {
-        self.registers.debug();
     }
 }

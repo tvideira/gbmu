@@ -16,11 +16,29 @@ impl CPU {
 
         self.registers.a ^= value;
 
+        self.registers.set_z_flag(self.registers.a == 0);
+        self.registers.set_n_flag(false);
         self.registers.set_h_flag(false);
         self.registers.set_c_flag(false);
-        self.registers.set_n_flag(false);
-        self.registers.set_z_flag(self.registers.a == 0);
 
         self.clock += 4;
+    }
+
+    pub fn xor_rr(&mut self, opcode: u16, mmu: & MMU) {
+        let value = match opcode {
+            0xAE => mmu.read_byte(self.registers.get_hl()),
+            0xEE => { self.registers.pc += 1; mmu.read_byte(self.registers.pc - 1) },
+            _ => panic!("You should not be here add rr"),
+
+        };
+
+        self.registers.a ^= value;
+
+        self.registers.set_z_flag(self.registers.a == 0);
+        self.registers.set_n_flag(false);
+        self.registers.set_h_flag(false);
+        self.registers.set_c_flag(false);
+
+        self.clock += 8;
     }
 }

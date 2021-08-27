@@ -15,24 +15,24 @@ pub struct REGISTERS {
 
 impl REGISTERS {
     pub fn get_af(&self) -> u16 {
-        return (self.a as u16) << 8 | (self.f as u16);
+        return ((self.a as u16) << 8) | (self.f as u16);
     }
 
     pub fn get_bc(&self) -> u16 {
-        return (self.b as u16) << 8 | (self.c as u16);
+        return ((self.b as u16) << 8) | (self.c as u16);
     }
 
     pub fn get_de(&self) -> u16 {
-        return (self.d as u16) << 8 | (self.e as u16);
+        return ((self.d as u16) << 8) | (self.e as u16);
     }
 
     pub fn get_hl(&self) -> u16 {
-        return (self.h as u16) << 8 | (self.l as u16);
+        return ((self.h as u16) << 8) | (self.l as u16);
     }
 
     pub fn set_af(&mut self, val: u16) {
         self.a = (val >> 8) as u8;
-        self.f = (val & 0xFF) as u8;
+        self.f = (val & 0xF0) as u8;
     }
 
     pub fn set_bc(&mut self, val: u16) {

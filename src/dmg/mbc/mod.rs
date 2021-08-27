@@ -45,10 +45,6 @@ impl MBC {
 pub fn get_mbc(cartridge: &Vec<u8>) -> MBC {
     match cartridge[0x147] {
         0x00 => MBC::ROM_ONLY,
-        0x01 => MBC::MBC1,
-        0x05 => MBC::MBC2,
-        0x11 => MBC::MBC3,
-        0x19 => MBC::MBC5,
-        _ => panic!("CARTRIDGE MBC NOT IMPLEMENTED YET"),
+        _ => MBC::ROM_ONLY,
     }
 } 

@@ -15,7 +15,7 @@ impl CPU {
             _ => panic!("You should not be here dec r"),
         };
         
-        self.registers.set_n_flag(false);
+        self.registers.set_n_flag(true);
         self.registers.set_h_flag((value & 0x0F) == 0x00);
         self.registers.set_z_flag(value.wrapping_sub(1) == 0);
         self.clock += 4;
@@ -30,5 +30,16 @@ impl CPU {
             _ => panic!("You should not be here dec rr"),
         };
         self.clock += 8;
+    }
+
+    pub fn dec_hl(&mut self, mmu: &mut MMU) {
+        let hl = self.registers.get_hl();
+        let value = mmu.read_byte(hl);
+        mmu.write_byte(hl, value.wrapping_sub(1));
+        
+        self.registers.set_n_flag(true);
+        self.registers.set_h_flag((value & 0x0F) == 0x00);
+        self.registers.set_z_flag(value.wrapping_sub(1) == 0);
+        self.clock += 12;
     }
 }

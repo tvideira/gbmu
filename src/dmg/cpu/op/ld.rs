@@ -118,6 +118,39 @@ impl CPU {
         self.clock += 4;
     }
 
+    pub fn ld_r_hl(&mut self, opcode: u16, mmu: & MMU) {
+        let value = mmu.read_byte(self.registers.get_hl());
+
+        match opcode {
+            0x46 => self.registers.b = value,
+            0x4E => self.registers.c = value,
+            0x56 => self.registers.d = value,
+            0x5E => self.registers.e = value,
+            0x66 => self.registers.h = value,
+            0x6E => self.registers.l = value,
+            0x7E => self.registers.a = value,
+            _ => panic!("you should not be here ld r hl"),
+        }
+
+        self.clock += 8;
+    }
+
+    pub fn ld_hl_r(&mut self, opcode: u16, mmu: &mut MMU) {
+        let value = match opcode {
+            0x70 => self.registers.b,
+            0x71 => self.registers.c,
+            0x72 => self.registers.d,
+            0x73 => self.registers.e,
+            0x74 => self.registers.h,
+            0x75 => self.registers.l,
+            _ => panic!("you should not be here ld hl r"),
+        };
+
+        mmu.write_byte(self.registers.get_hl(), value);
+
+        self.clock += 8;
+    }
+
     pub fn ld_ion_a(&mut self, mmu: &mut MMU) {
         let value = mmu.read_byte(self.registers.pc) as u16;
         mmu.write_byte(0xFF00 + value, self.registers.a);
@@ -144,10 +177,45 @@ impl CPU {
         self.clock += 8;
     }
 
-    pub fn ld_a_nn(&mut self, mmu: &mut MMU) {
+    pub fn ld_nn_a(&mut self, mmu: &mut MMU) {
         let addr = mmu.read_word(self.registers.pc);
         mmu.write_byte(addr, self.registers.a);
         self.registers.pc += 2;
         self.clock += 16;
+    }
+
+    pub fn ld_nn_sp(&mut self, mmu: &mut MMU) {
+        let addr = mmu.read_word(self.registers.pc);
+        mmu.write_word(addr, self.registers.sp);
+        self.registers.pc += 2;
+        self.clock += 20;
+    }
+
+    pub fn ld_a_nn(&mut self, mmu: & MMU) {
+        let addr = mmu.read_word(self.registers.pc);
+        self.registers.a = mmu.read_byte(addr);
+        self.registers.pc += 2;
+        self.clock += 16;
+    }
+
+    pub fn ld_hl_sp_n(&mut self, mmu: & MMU) {
+        let value = mmu.read_byte(self.registers.pc) as i8 as i16 as u16;
+        self.registers.pc += 1;
+        
+        let sp = self.registers.sp;
+
+        self.registers.set_hl(sp.wrapping_add(value));
+
+        self.registers.set_z_flag(false);
+        self.registers.set_n_flag(false);
+        self.registers.set_h_flag((sp & 0x000F) + (value & 0x000F) > 0x000F);
+        self.registers.set_c_flag((sp & 0x00FF) + (value & 0x00FF) > 0x00FF);
+
+        self.clock += 12;
+    }
+
+    pub fn ld_sp_hl(&mut self) {
+        self.registers.sp = self.registers.get_hl();
+        self.clock += 8;
     }
 }

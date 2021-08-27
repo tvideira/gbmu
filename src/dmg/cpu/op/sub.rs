@@ -17,11 +17,30 @@ impl CPU {
 
         self.registers.a = a.wrapping_sub(value);
 
+        self.registers.set_z_flag(self.registers.a == 0);
+        self.registers.set_n_flag(true);
         self.registers.set_h_flag((value & 0x0F) > (a & 0x0F));
         self.registers.set_c_flag(value > a);
-        self.registers.set_n_flag(true);
-        self.registers.set_z_flag(self.registers.a == 0);
 
         self.clock += 4;
+    }
+
+    pub fn sub_rr(&mut self, opcode: u16, mmu: & MMU) {
+        let a = self.registers.a;
+        let value = match opcode {
+            0x96 => mmu.read_byte(self.registers.get_hl()),
+            0xD6 => { self.registers.pc += 1; mmu.read_byte(self.registers.pc - 1) },
+            _ => panic!("You should not be here add rr"),
+
+        };
+
+        self.registers.a = a.wrapping_sub(value);
+
+        self.registers.set_z_flag(self.registers.a == 0);
+        self.registers.set_n_flag(true);
+        self.registers.set_h_flag((value & 0x0F) > (a & 0x0F));
+        self.registers.set_c_flag(value > a);
+
+        self.clock += 8;
     }
 }
