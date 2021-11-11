@@ -13,15 +13,13 @@ pub struct CPU {
     clock: u32,
     interrupt_master_enable: bool,
     is_halted: bool,
-    is_halted_until_button_pressed: bool,
 }
 
 impl CPU {
-    pub fn step(&mut self, mmu: &mut MMU) -> u32 {
+    pub fn step(&mut self, mmu: &mut MMU, debug: bool) -> u32 {
         self.clock = 0;
 
-        // HANDLE INTERRUPTS
-        self.handle_interrupts(mmu);
+        if debug { self.debug(mmu); }
 
         // HANDLE INSTRUCTION
         if !self.is_halted {
@@ -30,23 +28,27 @@ impl CPU {
             self.nop();
         }
 
-        //HANDLE BIOS
-        mmu.write_byte(0xFF00, 0xFF);
-        if self.registers.pc == 0x100 { println!("bios disabled"); mmu.disable_bios(); }
+        // HANDLE INTERRUPTS
+        self.handle_interrupts(mmu);
+
+        //HANDLE TOUCH UNTIL IT'S IMPLEMENTED
+        mmu.write_byte(0xFF00, 0xCF);
 
         return self.clock;
     }
 
-    pub fn handle_interrupts(&mut self, mmu: &mut MMU) {
-        if !self.interrupt_master_enable {
-            return ;
-        }
-
-        self.is_halted = false;
+    fn handle_interrupts(&mut self, mmu: &mut MMU) {
+        if !self.interrupt_master_enable && !self.is_halted { return ; }
 
         let interrupt_enable = mmu.read_byte(0xFFFF);
         let interrupt_flag = mmu.read_byte(0xFF0F);
         let interrupt_mask = interrupt_enable & interrupt_flag & 0x1F;
+
+        if interrupt_mask == 0 { return ; }
+        self.is_halted = false;
+
+        if !self.interrupt_master_enable { return ; }
+
 
         for i in 0..5 {
             if (interrupt_mask >> i) == 1 {
@@ -59,11 +61,9 @@ impl CPU {
                 break ;
             }
         }
-
-        self.clock += 20;
     }
 
-    pub fn do_operation(&mut self, mmu: &mut MMU) {
+    fn do_operation(&mut self, mmu: &mut MMU) {
         let addr = self.registers.pc;
         let mut opcode = mmu.read_byte(addr) as u16;
         if opcode == 0xCB {
@@ -173,5 +173,36 @@ impl CPU {
 
             _ => panic!("INSTRUCTION {:X} at 0x{:04X} NOT IMPLEMENTED YET", opcode, addr),
         }
+    }
+
+    pub fn skip_bios(&mut self) {
+        // Registers value after boot (according to PanDocs)
+        self.registers.set_af(0x01b0);
+        self.registers.set_bc(0x0013);
+        self.registers.set_de(0x00d8);
+        self.registers.set_hl(0x014d);
+        self.registers.sp = 0xfffe;
+        self.registers.pc = 0x100;
+    }
+
+    pub fn debug(&self, mmu: & MMU) {
+        let addr = self.registers.pc;
+        let mut opcode = mmu.read_byte(addr) as u16;
+        let next_byte: u8;
+        
+        if opcode == 0xCB {
+            opcode = opcode << 8 | (mmu.read_byte(addr + 1) as u16);
+            next_byte = mmu.read_byte(addr + 2);
+        } else {
+            next_byte = mmu.read_byte(addr + 1);
+        }
+
+        println!("DEBUG CPU REGISTERS :");
+        println!("A: 0x{:02X} | F: 0x{:02X} | AF: 0x{:04X}", self.registers.a, self.registers.f, self.registers.get_af());
+        println!("B: 0x{:02X} | C: 0x{:02X} | BC: 0x{:04X}", self.registers.b, self.registers.c, self.registers.get_bc());
+        println!("D: 0x{:02X} | E: 0x{:02X} | DE: 0x{:04X}", self.registers.d, self.registers.e, self.registers.get_de());
+        println!("H: 0x{:02X} | L: 0x{:02X} | HL: 0x{:04X}\n", self.registers.h, self.registers.l, self.registers.get_hl());
+        println!("SP: 0x{:04X} | PC: 0x{:04X} {:X} {:X} \n", self.registers.sp, self.registers.pc, opcode, next_byte);
+        println!("Z_FLAG: {{{}}} N_FLAG: {{{}}} H_FLAG: {{{}}} C_FLAG {{{}}}\n", self.registers.get_z_flag(), self.registers.get_n_flag(), self.registers.get_h_flag(), self.registers.get_c_flag());
     }
 }

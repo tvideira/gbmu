@@ -6,11 +6,11 @@ impl CPU {
         self.clock += 4
     }
 
-    pub fn stop(&mut self) {
+    /*pub fn stop(&mut self) {
         self.is_halted_until_button_pressed = true;
         self.registers.pc += 1;
         self.clock += 4;
-    }
+    }*/
 
     pub fn daa(&mut self) {
         let n_flag = self.registers.get_n_flag();
@@ -28,6 +28,7 @@ impl CPU {
         } else {
             if c_flag {
                 self.registers.a = self.registers.a.wrapping_sub(0x60);
+                self.registers.set_c_flag(true);
             }
             if h_flag {
                 self.registers.a = self.registers.a.wrapping_sub(0x06);
@@ -35,7 +36,6 @@ impl CPU {
         }
         self.registers.set_z_flag(self.registers.a == 0);
         self.registers.set_h_flag(false);
-        self.registers.pc += 1;
         self.clock += 4;
     }
 

@@ -26,10 +26,18 @@ impl Default for PPU {
             tile_data_buffer: vec![0; 128 * 384],
             background_buffer: vec![0; 256 * 256],
             colors: vec![
+                /*
                 from_u8_rgb(0xE0, 0xF8, 0xD0),
                 from_u8_rgb(0x88, 0xC0, 0x70),
                 from_u8_rgb(0x34, 0x68, 0x56),
                 from_u8_rgb(0x08, 0x18, 0x20),
+                */
+                
+                from_u8_rgb(0xFF, 0xFF, 0xFF),
+                from_u8_rgb(0xAA, 0xAA, 0xAA),
+                from_u8_rgb(0x55, 0x55, 0x55),
+                from_u8_rgb(0x00, 0x00, 0x00),
+                
             ],
         }
     }
@@ -176,46 +184,86 @@ impl PPU {
     }
 
     pub fn render_scan(&mut self, mmu: & MMU) {
-        // which screen line will be written
-        let y = mmu.read_byte(0xFF44) as usize;
-        let scy = mmu.read_byte(0xFF42) as usize;
-        let scx = mmu.read_byte(0xFF43) as u16;
-        let bg_tile_map_address = (mmu.read_byte(0xFF40) & 0x08) == 0x08;
-        let bg_window_tile_data = (mmu.read_byte(0xFF40) & 0x10) == 0x10;
-        let bgp = mmu.read_byte(0xFF47);
+        let lcdc    = mmu.read_byte(0xFF40);
+        let ly      = mmu.read_byte(0xFF44);
+        let scy     = mmu.read_byte(0xFF42) as usize;
+        let scx     = mmu.read_byte(0xFF43) as u16;
+        let bg_tile_map_address = (lcdc & 0x08) == 0x08;
+        let bg_window_tile_data = (lcdc & 0x10) == 0x10;
+        let bgp = self.make_palette(mmu.read_byte(0xFF47));
 
-        // which line to render (LY + SCY % 256)
-        let start_y: u16 = ((y + scy) as u16) & 0xFF;
+        // QUITTING IF LCD IS OFF
+        if (lcdc & 0x80) == 0 {
+            return ;
+        }
 
-        // FIND TILE_MAP_ADDR
-        let mut tile_map_addr: u16 = if bg_tile_map_address { 0x9C00 } else { 0x9800 };
-        tile_map_addr += 32 * (start_y >> 3); // offset the line part
-        
-        let mut tile_map_addr_off_x = scx >> 3; // offset the column part
-        
-        // FIND WHICH TILE TO DISPLAY
-        let mut tile_index = mmu.read_byte(tile_map_addr + tile_map_addr_off_x) as usize;
-        if !bg_window_tile_data && tile_index < 128 { tile_index += 256; }
+        // RENDER BACKGROUND
+        if (lcdc & 0x10) == 0x10 {
+            let y = ly as usize;
+            let start_y: u16 = ((y + scy) as u16) & 0xFF;
+            
+            let mut tile_map_addr: u16 = if bg_tile_map_address { 0x9C00 } else { 0x9800 };
+            tile_map_addr += 32 * (start_y >> 3); // offset the line part
+            let mut tile_map_addr_off_x = scx >> 3; // offset the column part
+            
+            let mut tile_index = mmu.read_byte(tile_map_addr + tile_map_addr_off_x) as usize;
+            if !bg_window_tile_data && tile_index < 128 { tile_index += 256; }
+            let mut tile = mmu.get_tile_data(tile_index);
 
-        let mut tile_x = (scx % 8) as u8;
-        let tile_y = (start_y % 8) as u8;
+            let mut tile_x = (scx % 8) as u8;
+            let tile_y = (start_y % 8) as u8;
 
-        let mut tile = mmu.get_tile_data(tile_index);
+            for x in 0 .. 160 {
+                let pixel = self.get_tile_pixel(&tile, tile_x, tile_y);
+                self.main_screen_buffer[y * 160 + x] = self.colors[bgp[pixel as usize] as usize];
+                tile_x += 1;
+                if tile_x >= 8 {
+                    tile_x = 0;
+                    tile_map_addr_off_x = (tile_map_addr_off_x + 1) % 32;
+                    tile_index = mmu.read_byte(tile_map_addr + tile_map_addr_off_x) as usize;
+                    if !bg_window_tile_data && tile_index < 128 { tile_index += 256; }
+                    tile = mmu.get_tile_data(tile_index);
+                }
+            }
+        }
 
-        let palette = self.make_palette(bgp);
-        for x in 0 .. 160 {
-            let pixel = self.get_tile_pixel(&tile, tile_x, tile_y);
-            self.main_screen_buffer[y * 160 + x] = self.colors[palette[pixel as usize] as usize];
+        // RENDER WINDOW
+        // TO DO
 
-            tile_x += 1;
-            if tile_x >= 8 {
-                tile_x = 0;
-                tile_map_addr_off_x = (tile_map_addr_off_x + 1) % 32;
-                tile_index = mmu.read_byte(tile_map_addr + tile_map_addr_off_x) as usize;
-                
-                if !bg_window_tile_data && tile_index < 128 { tile_index += 256; }
-                
-                tile = mmu.get_tile_data(tile_index);
+        // RENDER SPRITES
+        if (lcdc & 0x02) == 0x02 {
+            let obp0 = self.make_palette(mmu.read_byte(0xFF48));
+            let obp1 = self.make_palette(mmu.read_byte(0xFF49));
+            for i in 0..40 {
+                let obj_y       = (mmu.read_byte(0xFE00 + (4 * i)) as i16) - 16;
+                let obj_x       = (mmu.read_byte(0xFE00 + (4 * i) + 1) as i16) - 8;
+                let obj_tile    = mmu.read_byte(0xFE00 + (4 * i) + 2);
+                let obj_flag    = mmu.read_byte(0xFE00 + (4 * i) + 3);
+                let obp         = if (obj_flag & 0x10) == 0x10 { &obp1 } else { &obp0 };
+                let obj_x_flip  = (obj_flag & 0x20) == 0x20;
+                let obj_y_flip  = (obj_flag & 0x40) == 0x40;
+                let obj_prio    = (obj_flag & 0x80) == 0x80;
+
+                if obj_y <= ly as i16 && (obj_y + 8) > ly as i16 {
+                    let offset = (ly as usize * 160) + obj_x as usize;
+                    let tile = mmu.get_tile_data(obj_tile as usize);
+
+                    let mut tile_y = ly - obj_y as u8;
+
+                    if obj_y_flip {
+                        tile_y = 7 - tile_y;
+                    }
+
+                    for x in 0..8 {
+                        if ((obj_x + x) >= 0)
+                        && ((obj_x + x) < 160)
+                        && (!obj_prio || (self.main_screen_buffer[offset + x as usize] == self.colors[bgp[0] as usize])) {
+                            let tile_x = if obj_x_flip { 7 - x as u8 } else { x as u8 }; 
+                            let pixel = self.get_tile_pixel(tile, tile_x, tile_y);
+                            self.main_screen_buffer[offset + x as usize] = self.colors[obp[pixel as usize] as usize];
+                        }
+                    }
+                }
             }
         }
     }

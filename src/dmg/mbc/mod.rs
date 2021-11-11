@@ -1,50 +1,55 @@
 mod rom_only;
+mod mbc1;
 
-use super::MMU;
+use rom_only::ROM_ONLY;
+use mbc1::MBC1;
 
-use rom_only::update_banks_rom_only;
+use std::path::PathBuf;
+use std::fs;
 
-use std::fmt;
+pub trait MBC {
+    // Constructor
+    fn new(cartridge: Vec<u8>) -> Box<dyn MBC> where Self: Sized;
 
-#[allow(non_camel_case_types)]
-pub enum MBC {
-    ROM_ONLY,
-    MBC1,
-    MBC2,
-    MBC3,
-    MBC5,
-}
+    // Method ROM ACCESS
+    fn read_rom(&self, addr: u16) -> u8;
+    fn write_rom(&mut self, addr: u16, value: u8);
 
-impl Default for MBC {
-    fn default() -> Self {
-        Self::ROM_ONLY
-    }
-}
+    // Method RAM ACCESS
+    fn read_ram(&self, addr: u16) -> u8;
+    fn write_ram(&mut self, addr: u16, value: u8);
 
-impl fmt::Display for MBC {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::ROM_ONLY => { write!(f, "ROM_ONLY") },
-            Self::MBC1 => { write!(f, "MBC1") },
-            Self::MBC2 => { write!(f, "MBC2") },
-            Self::MBC3 => { write!(f, "MBC3") },
-            Self::MBC5 => { write!(f, "MBC5") },
+    // Default method definition
+    fn print_cartridge_title(&self) {
+        for i in 0x134..0x143 {
+            print!("{}", self.read_rom(i) as char);
         }
+        println!();
     }
 }
 
-impl MBC {
-    pub fn update_banks(&self, mmu: &mut MMU, cartridge: &Vec<u8>) {
-        match self {
-            Self::ROM_ONLY => update_banks_rom_only(mmu, cartridge),
-            _ => panic!("CARTRIDGE MBC NOT IMPLEMENTED YET"),
-        }        
+impl Default for Box<dyn MBC> {
+    fn default() -> Box<dyn MBC> {
+        return ROM_ONLY::new(vec!());
     }
 }
 
-pub fn get_mbc(cartridge: &Vec<u8>) -> MBC {
-    match cartridge[0x147] {
-        0x00 => MBC::ROM_ONLY,
-        _ => MBC::ROM_ONLY,
+pub fn get_mbc(cartridge_path: PathBuf) -> Box<dyn MBC> {
+    let rom = fs::read(cartridge_path).expect("Could not read file");
+
+    match rom[0x147] {
+        0x00 => { println!("ROM ONLY"); ROM_ONLY::new(rom) },
+        0x01 => { println!("MBC1"); MBC1::new(rom) },
+        _ => panic!("MBC required for this cartridge is not implemented!"),
     }
-} 
+}
+
+pub fn nb_ram_bank(value: u8) -> usize {
+    return match value {
+        2 => 1,
+        3 => 4,
+        4 => 16,
+        5 => 8,
+        _ => 0,
+    };
+}
